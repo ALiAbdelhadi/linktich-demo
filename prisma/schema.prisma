@@ -1,0 +1,254 @@
+// ==============================================================================
+// Linktich - B2B2C SaaS Database Schema (Prisma ORM)
+// Platform connecting Tutoring Centers, Teachers, and Students in Egypt
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ------------------------------------------------------------------------------
+// ENUMS
+// ------------------------------------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  CENTER
+  TEACHER
+  STUDENT
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+  EXPIRED
+  INACTIVE
+}
+
+enum SubscriptionPlan {
+  FREE_TRIAL
+  // Center Plans
+  CENTER_BASIC_MONTHLY
+  CENTER_BASIC_YEARLY
+  CENTER_PRO_MONTHLY
+  CENTER_PRO_YEARLY
+  CENTER_ENTERPRISE
+  // Teacher Plans
+  TEACHER_BASIC_MONTHLY
+  TEACHER_BASIC_YEARLY
+  TEACHER_PRO_MONTHLY
+  TEACHER_PRO_YEARLY
+}
+
+enum RelationStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+  TERMINATED
+}
+
+enum BillingCycle {
+  PER_SESSION
+  MONTHLY
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  REFUNDED
+  EXEMPT
+}
+
+enum AttendanceStatus {
+  REGISTERED
+  REGULAR
+  AT_RISK
+  DROPPED
+}
+
+enum SessionAttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+// ------------------------------------------------------------------------------
+// MODELS
+// ------------------------------------------------------------------------------
+
+/// System User: Handles authentication & baseline profile info across all roles
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  role         UserRole @default(STUDENT)
+  name         String   @db.VarChar(255)
+  email        String   @unique @db.VarChar(255)
+  phone        String   @db.VarChar(20) // e.g. +201012345678 (WhatsApp-ready)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  avatarUrl    String?  @db.Text
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // 1-to-1 Profile Relations (Role-specific)
+  centerProfile  Center?
+  teacherProfile Teacher?
+
+  // 1-to-Many Relations
+  enrollments        Enrollment[]
+  sessionAttendances SessionAttendance[]
+
+  @@index([role])
+  @@index([phone])
+  @@map("users")
+}
+
+/// Tutoring Center: B2B entity paying recurring SaaS subscription
+model Center {
+  id                         String             @id @default(uuid()) @db.Uuid
+  ownerId                    String             @unique @map("owner_id") @db.Uuid
+  name                       String             @db.VarChar(255)
+  location                   String             @db.VarChar(255) // Governorate, City, District in Egypt
+  phone                      String?            @db.VarChar(20)
+  subscriptionStatus         SubscriptionStatus @default(TRIALING) @map("subscription_status")
+  subscriptionPlan           SubscriptionPlan   @default(FREE_TRIAL) @map("subscription_plan")
+  subscriptionCurrentPeriodEnd DateTime?        @map("subscription_current_period_end") @db.Timestamptz(6)
+  createdAt                  DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relationships
+  owner           User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  teacherRelations CenterTeacherRelation[]
+  classes         Class[]
+
+  @@index([subscriptionStatus])
+  @@index([location])
+  @@map("centers")
+}
+
+/// Teacher: B2B/B2C entity paying SaaS subscription to manage groups and students
+model Teacher {
+  id                         String             @id @default(uuid()) @db.Uuid
+  userId                     String             @unique @map("user_id") @db.Uuid
+  subject                    String             @db.VarChar(120) // e.g., Mathematics, Physics, Arabic
+  bio                        String?            @db.Text
+  subscriptionStatus         SubscriptionStatus @default(TRIALING) @map("subscription_status")
+  subscriptionPlan           SubscriptionPlan   @default(FREE_TRIAL) @map("subscription_plan")
+  subscriptionCurrentPeriodEnd DateTime?        @map("subscription_current_period_end") @db.Timestamptz(6)
+  createdAt                  DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relationships
+  user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  centerRelations CenterTeacherRelation[]
+  classes         Class[]
+
+  @@index([subject])
+  @@index([subscriptionStatus])
+  @@map("teachers")
+}
+
+/// Center-Teacher Affiliation: Tracks which teachers operate in which centers
+model CenterTeacherRelation {
+  id             String         @id @default(uuid()) @db.Uuid
+  centerId       String         @map("center_id") @db.Uuid
+  teacherId      String         @map("teacher_id") @db.Uuid
+  status         RelationStatus @default(ACTIVE)
+  commissionRate Decimal?       @map("commission_rate") @db.Decimal(5, 2) // Optional % split (e.g. 20.00%)
+  joinedAt       DateTime       @default(now()) @map("joined_at") @db.Timestamptz(6)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relationships
+  center  Center  @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@unique([centerId, teacherId])
+  @@index([centerId])
+  @@index([teacherId])
+  @@index([status])
+  @@map("center_teacher_relations")
+}
+
+/// Courses/Classes: Specific learning group (مجموعة) managed inside a center by a teacher
+model Class {
+  id           String       @id @default(uuid()) @db.Uuid
+  centerId     String       @map("center_id") @db.Uuid
+  teacherId    String       @map("teacher_id") @db.Uuid
+  name         String       @db.VarChar(255) // e.g. "Sec 3 Physics - Group A"
+  schedule     Json         // [{ "day": "Sunday", "startTime": "16:00", "endTime": "18:00" }]
+  price        Decimal      @db.Decimal(10, 2) // Egyptian Pounds (EGP)
+  billingCycle BillingCycle @default(MONTHLY) @map("billing_cycle")
+  capacity     Int?         // Max students capacity
+  isActive     Boolean      @default(true) @map("is_active")
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relationships
+  center             Center              @relation(fields: [centerId], references: [id], onDelete: Restrict)
+  teacher            Teacher             @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  enrollments        Enrollment[]
+  sessionAttendances SessionAttendance[]
+
+  @@index([centerId])
+  @@index([teacherId])
+  @@index([isActive])
+  @@map("classes")
+}
+
+/// Enrollments: Connects a Student to a Class with tuition and attendance tracking
+model Enrollment {
+  id                 String              @id @default(uuid()) @db.Uuid
+  studentId          String              @map("student_id") @db.Uuid
+  classId            String              @map("class_id") @db.Uuid
+  paymentStatus      PaymentStatus       @default(PENDING) @map("payment_status")
+  attendanceStatus   AttendanceStatus    @default(REGISTERED) @map("attendance_status")
+  enrolledAt         DateTime            @default(now()) @map("enrolled_at") @db.Timestamptz(6)
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relationships
+  student            User                @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class              Class               @relation(fields: [classId], references: [id], onDelete: Cascade)
+  sessionAttendances SessionAttendance[]
+
+  @@unique([studentId, classId])
+  @@index([studentId])
+  @@index([classId])
+  @@index([paymentStatus])
+  @@index([attendanceStatus])
+  @@map("enrollments")
+}
+
+/// SessionAttendance: Per-session attendance and payment tracking for a student in a class
+model SessionAttendance {
+  id           String                  @id @default(uuid()) @db.Uuid
+  enrollmentId String                  @map("enrollment_id") @db.Uuid
+  classId      String                  @map("class_id") @db.Uuid
+  studentId    String                  @map("student_id") @db.Uuid
+  sessionDate  DateTime                @map("session_date") @db.Date
+  status       SessionAttendanceStatus @default(PRESENT)
+  isPaid       Boolean                 @default(false) @map("is_paid")
+  amountPaid   Decimal?                @map("amount_paid") @db.Decimal(10, 2)
+  notes        String?                 @db.Text
+  createdAt    DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  enrollment   Enrollment              @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  class        Class                   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  student      User                    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, sessionDate])
+  @@index([classId, sessionDate])
+  @@index([studentId])
+  @@map("session_attendances")
+}

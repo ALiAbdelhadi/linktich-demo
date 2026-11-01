@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 20% 5%;       /* #0A0A0F */
+    --foreground: 210 40% 98%;      /* #F8FAFC */
+    --card: 240 18% 9%;             /* #12121A */
+    --card-foreground: 210 40% 98%;
+    --primary: 260 100% 44%;        /* #4A00E0 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 190 100% 50%;      /* #00D4FF */
+    --secondary-foreground: 240 20% 5%;
+    --gold: 48 100% 50%;            /* #FFD700 */
+    --border: 240 10% 16%;
+    --input: 240 10% 16%;
+    --ring: 190 100% 50%;
+  }
+
+  * {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  body {
+    background-color: #0A0A0F;
+    color: #F8FAFC;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    overflow-x: hidden;
+  }
+
+  /* English uses Inter first; Arabic keeps Cairo (Tailwind font-sans). */
+  html[lang='en'] body {
+    font-family: 'Inter', 'Cairo', system-ui, sans-serif;
+  }
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0A0A0F;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1F1F2E;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4A00E0;
+}
+
+/* Glassmorphism utility classes */
+.glass-panel {
+  background: rgba(18, 18, 26, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-panel-elevated {
+  background: rgba(26, 26, 38, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.glow-indigo {
+  box-shadow: 0 0 25px -4px rgba(74, 0, 224, 0.5);
+}
+
+.glow-cyan {
+  box-shadow: 0 0 25px -4px rgba(0, 212, 255, 0.4);
+}
+
+.glow-gold {
+  box-shadow: 0 0 20px -2px rgba(255, 215, 0, 0.35);
+}
